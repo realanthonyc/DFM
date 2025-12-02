@@ -1,0 +1,79 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © realanthonyc
+
+//@version=6
+// ---------------------------------------------------------------
+//  Directional Flow & Momentum (DFM)
+//  v1.2.0
+// ---------------------------------------------------------------
+indicator(title="Directional Flow & Momentum (DFM)", shorttitle="DFM", format=format.percent, precision=1, timeframe="", timeframe_gaps=true, explicit_plot_zorder=true)
+
+// === Inputs ===
+
+inputGroup = "Indicator Lengths"
+adxlen = input.int(14, title="ADX Smoothing Length (rADX)", minval=1, group=inputGroup, tooltip="Smoothing period for the Directional ADX (rADX).")
+dilen = input.int(14, title="DI Length", minval=1, group=inputGroup, tooltip="Period for the core Directional Index (DI) calculation.")
+mfiLen = input.int(14, title="MFI Length", minval=1, group=inputGroup)
+mfiExtraSmooth = input.int(3, title="nMFI Extra EMA Smoothing", minval=1, group=inputGroup, tooltip="Additional EMA smoothing applied to the Normalized MFI (nMFI) to match DMO's smoothness.")
+
+// === DMI Calculation (Base for DMO/rADX) ===
+
+up = ta.change(high)
+down = -ta.change(low)
+plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+
+truerange = ta.rma(ta.tr, dilen)
+plusRaw = fixnan(100 * ta.rma(plusDM, dilen) / truerange)
+minusRaw = fixnan(100 * ta.rma(minusDM, dilen) / truerange)
+
+plusDI = plusRaw 
+minusDI = minusRaw
+
+// === Directional Momentum Oscillator (DMO) Calculation ===
+
+sum = plusDI + minusDI
+dmo = fixnan(100 * (plusDI - minusDI) / (sum == 0 ? 1 : sum))
+
+// === Directional ADX (rADX) Calculation ===
+
+radx = ta.rma(dmo, adxlen)
+
+// === Normalized MFI (nMFI) Calculation ===
+
+mfi_classic = ta.mfi(hlc3, mfiLen)
+nmfi_raw = (mfi_classic - 50) * 2
+nmfi = mfiExtraSmooth == 1 ? nmfi_raw : ta.ema(nmfi_raw, mfiExtraSmooth)
+
+// === Plotting & Filling ===
+
+// Colors
+colorRef    = color.new(#A0A0A0, 65)
+colorBacked = #4FC3F7
+colorThin   = #FFB74D
+
+// Reference Lines
+hline(0, "Zero Line", color=color.new(colorRef, 40), linestyle=hline.style_solid)
+hline(80,  title="+80 Ref Line", color=color.new(colorBacked, 40), linewidth=2, linestyle=hline.style_dotted)
+hline(20,  title="+20 Ref Line", color=colorRef, display=display.none)
+hline(-20, title="-20 Ref Lien", color=colorRef, display=display.none)
+hline(-80, title="-80 Ref Line", color=color.new(colorThin, 40), linewidth=2, linestyle=hline.style_dotted)
+
+// rADX (Slow Line)
+plot(radx, title="Slow Line: rADX (Trend Strength)", color=color.new(#FB4A55, 35), linewidth=2, linestyle = plot.linestyle_dotted)
+
+// DMO (Fast Line)
+pDMO = plot(dmo, title="Fast Line: DMO (Price Momentum)", color=color.rgb(31, 144, 214), linewidth=2)
+
+// nMFI (Hidden Plot)
+pNMFI = plot(nmfi, title="Volume Flow: nMFI", color=#00A86B, linewidth=2, display=display.none)
+
+// Fill Colors
+fillColor = nmfi >= dmo ? color.new(colorBacked, 70) : color.new(colorThin, 70)
+fill(pDMO, pNMFI, color=fillColor, title="Strength Comparison: nMFI vs DMO")
+
+// === Interpretation ===
+// DMO: Directional Momentum Oscillator (Price-based momentum, Fast line)
+// rADX: Retained ADX Direction (Price-based trend strength, Slow line)
+// nMFI: Normalized Money Flow Index (Volume-based directional flow)
+// DFM reveals whether current directional price momentum is truly backed by structural trend strength and real volume flow, distinguishing healthy, sustainable moves from thin, vulnerable pushes.
